@@ -9,51 +9,85 @@
 #include <chrono>
 #include <array>
 
+const int WORLD_SIZE= 5;
+
 using namespace std;
 using namespace std::chrono;
+using State= pair<int, int>;
+using StateAction= pair<pair<int, int>, char>;
+using Action= char;
+using Reward= double;
+using Prob= double;
+using Value= double;
+using World= array<array<double, WORLD_SIZE>, WORLD_SIZE>;
+using ValFunc= map<State, Value>;
 
-const int WORLD_SIZE= 5;
 pair<int, int> A_POS       {0, 1};
 pair<int, int> A_PRIME_POS {4, 1};
 pair<int, int> B_POS       {0, 3};
 pair<int, int> B_PRIME_POS {2, 3};
 double discount= 0.9;
 
-array<array<double, WORLD_SIZE>, WORLD_SIZE> world {0.0};
-
+ValFunc valFunc;
 
 // Left, Up, Right, Down
-const set<char> actionSet {'L', 'U', 'R', 'D'};
-const int NUM_ACTIONS= 4;
+const set<Action> actionSet {'L', 'U', 'R', 'D'};
 
-map<char, double> prob {{'L', 0.25}, {'U', 0.25}, {'R', 0.25}, {'D', 0.25}};
+map<Action, Prob> prob {{'L', 0.25}, {'U', 0.25}, {'R', 0.25}, {'D', 0.25}};
 
-pair<map<char, pair<int, int>>, map<char, double>> setNextAndRewardMaps(int, int);
-void copyWorld(double target[WORLD_SIZE][WORLD_SIZE], double source[WORLD_SIZE][WORLD_SIZE]);
-void printW(array<array<double, WORLD_SIZE>, WORLD_SIZE> w);
+pair<map<char, pair<int, int>>, map<char, double>> setNextAndRewardMaps(State);
+void printValFunc(ValFunc);
 
-map<char, double> actionProb[WORLD_SIZE][WORLD_SIZE];
-
-void setActionProb(){
-    for (int i= 0; i < WORLD_SIZE; ++i)
-        for (int j = 0; j < WORLD_SIZE; ++j)
-            actionProb[i][j]= prob;
-}
-
-map<char, pair<int, int>> nextState[WORLD_SIZE][WORLD_SIZE];
-map<char, double> actionReward[WORLD_SIZE][WORLD_SIZE];
-
-void setNextStateActionReward(){
+void printValFunc(ValFunc valFunc){
     for (int i= 0; i < WORLD_SIZE; ++i){
         for (int j = 0; j < WORLD_SIZE; ++j){
-            nextState[i][j] = setNextAndRewardMaps(i, j).first;
-            actionReward[i][j] = setNextAndRewardMaps(i, j).second;
+            State s= make_pair(i, j);
+            cout << valFunc[s] << " ";
+        }
+        cout << endl;
+    }
+}
+
+set<State> stateSpace {};
+
+void setStateSpace(){
+    for (int i= 0; i < WORLD_SIZE; ++i) {
+        for (int j = 0; j < WORLD_SIZE; ++j) {
+            State s {i, j};
+            stateSpace.insert(s);
         }
     }
 }
 
-pair<map<char, pair<int, int>>, map<char, double>> setNextAndRewardMaps(int i, int j){
-    pair<int, int> location= {i, j};
+
+void initValueFunctionZero(ValFunc valFunc){
+    for (State s : stateSpace) {
+        valFunc[s]= 0.0;
+    }
+}
+
+map<StateAction, Prob> actionProb;
+
+void setActionProb(){
+    for (State s : stateSpace)
+        for (Action a : actionSet)
+            actionProb[make_pair(s, a)]= prob[a];
+}
+
+map<StateAction, State> nextState;
+map<StateAction, Reward> actionReward;
+void setNextStateActionReward(){
+    for (State s : stateSpace){
+        for(Action a : actionSet) {
+            nextState[make_pair(s, a)] = setNextAndRewardMaps(s).first[a];
+            actionReward[make_pair(s, a)] = setNextAndRewardMaps(s).second[a];
+        }
+    }
+}
+
+pair<map<char, pair<int, int>>, map<char, double>> setNextAndRewardMaps(State location){
+    int i= location.first;
+    int j= location.second;
     map<char, pair<int, int>> next;
     map<char, double> reward;
 
@@ -107,58 +141,76 @@ pair<map<char, pair<int, int>>, map<char, double>> setNextAndRewardMaps(int i, i
 
 };
 
-double absWorld(array<array<double, WORLD_SIZE>, WORLD_SIZE> w1, array<array<double, WORLD_SIZE>, WORLD_SIZE> w2){
+double absValue(ValFunc vf1, ValFunc vf2){
     double sum= 0.0;
-    for (int i= 0; i < WORLD_SIZE; ++i){
-        for (int j = 0; j < WORLD_SIZE; ++j){
-            sum += abs(w1[i][j] - w2[i][j]);
-        }
-    }
+    for (State s : stateSpace)
+        sum += abs(vf1[s] - vf2[s]);
+
     return sum;
 }
 
-
 void computeRandomPolicy(){
     double diff;
-    pair<int, int> newPosition;
+    State newState;
 
     do {
-        array<array<double, WORLD_SIZE>, WORLD_SIZE> newWorld {0.0};
-        for (int i= 0; i < WORLD_SIZE; ++i){
-            for (int j = 0; j < WORLD_SIZE; ++j){
-                for (char action : actionSet){
-                    newPosition= nextState[i][j].at(action);
-                    //bellman equation
-                    newWorld[i][j] += actionProb[i][j][action] * (actionReward[i][j][action] + discount * world[newPosition.first][newPosition.second]);
-                }
+        ValFunc newValFunc;
+        initValueFunctionZero(newValFunc);
+
+
+        for (State s : stateSpace){
+            for (Action a : actionSet){
+                newState= nextState[make_pair(s, a)];
+                //bellman equation
+                newValFunc[s] = newValFunc[s] + actionProb[make_pair(s, a)] *
+                                                  (actionReward[make_pair(s, a)] + discount * valFunc[newState]);
             }
         }
-        diff= absWorld(world, newWorld);
-        //cout << diff << endl;
-        world = newWorld;
+        diff= absValue(valFunc, newValFunc);
+        valFunc = newValFunc;
 
     } while (diff > 0.00000001);
     cout << "Random Policy (refactored):" << endl;
-    printW(world);
+    printValFunc(valFunc);
 
 }
 
+void computeOptimalPolicy(){
+    double diff;
+    State newState;
 
-void printW(array<array<double, WORLD_SIZE>, WORLD_SIZE> w){
-    for (int i= 0; i < WORLD_SIZE; ++i){
-        for (int j = 0; j < WORLD_SIZE; ++j){
-            cout << w[i][j] << " ";
+    do {
+        ValFunc newValFunc;
+        initValueFunctionZero(newValFunc);
+
+
+        for (State s : stateSpace){
+            for (Action a : actionSet){
+                newState= nextState[make_pair(s, a)];
+                //bellman equation
+                newValFunc[s] = newValFunc[s] + actionProb[make_pair(s, a)] *
+                                                (actionReward[make_pair(s, a)] + discount * valFunc[newState]);
+            }
         }
-        cout << endl;
-    }
+        diff= absValue(valFunc, newValFunc);
+        valFunc = newValFunc;
+
+    } while (diff > 0.00000001);
+    cout << "Optimal Policy (refactored):" << endl;
+    printValFunc(valFunc);
+
 }
+
 
 int main() {
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
+    setStateSpace();
     setActionProb();
     setNextStateActionReward();
+    initValueFunctionZero(valFunc);
     computeRandomPolicy();
+    computeOptimalPolicy();
 
 
 
