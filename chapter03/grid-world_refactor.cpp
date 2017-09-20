@@ -8,6 +8,7 @@
 #include <set>
 #include <chrono>
 #include <array>
+#include <vector>
 
 const int WORLD_SIZE= 5;
 
@@ -176,6 +177,7 @@ void computeRandomPolicy(){
 }
 
 void computeOptimalPolicy(){
+    initValueFunctionZero(valFunc);
     double diff;
     State newState;
 
@@ -185,11 +187,12 @@ void computeOptimalPolicy(){
 
 
         for (State s : stateSpace){
+            vector<double> values;
             for (Action a : actionSet){
                 newState= nextState[make_pair(s, a)];
                 //bellman equation
-                newValFunc[s] = newValFunc[s] + actionProb[make_pair(s, a)] *
-                                                (actionReward[make_pair(s, a)] + discount * valFunc[newState]);
+                values.push_back(actionReward[make_pair(s, a)] + discount * valFunc[newState]);
+                newValFunc[s]= *max_element(values.cbegin(), values.cend());
             }
         }
         diff= absValue(valFunc, newValFunc);
@@ -209,13 +212,22 @@ int main() {
     setActionProb();
     setNextStateActionReward();
     initValueFunctionZero(valFunc);
-    computeRandomPolicy();
-    computeOptimalPolicy();
-
-
 
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>( t2 - t1 ).count();
-    cout << duration;
+
+    computeRandomPolicy();
+
+    cout << "" << endl;
+    high_resolution_clock::time_point t3 = high_resolution_clock::now();
+
+
+    computeOptimalPolicy();
+
+    cout << "" << endl;
+    high_resolution_clock::time_point t4 = high_resolution_clock::now();
+    auto dur1 = duration_cast<microseconds>( t2 - t1 ).count();
+    auto dur2 = duration_cast<microseconds>( t3 - t2 ).count();
+    auto dur3 = duration_cast<microseconds>( t4 - t3 ).count();
+    cout << "setup: " << dur1 << "  random: " << dur2 << "  optimal: " << dur3 << "   (microseconds)" << endl;
 }
 
