@@ -137,8 +137,8 @@ pair<map<char, pair<int, int>>, map<char, double>> setNextAndRewardMaps(State lo
         next['L']= next['R']= next['D']= next['U']= B_PRIME_POS;
         reward['L']= reward['R']= reward['D']= reward['U']= 5.0;
     }
-    pair<map<char, pair<int, int>>, map<char, double>> result= {next, reward};
-    return result;
+
+    return {next, reward};
 
 };
 
